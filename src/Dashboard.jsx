@@ -245,7 +245,8 @@ export default function Dashboard() {
 
   // Top importers
   const topImporters = useMemo(() => {
-    const src = selFamily ? DATA.importers.filter(r => r.family === selFamily) : DATA.importers;
+    let src = selFamily ? DATA.importers.filter(r => r.family === selFamily) : DATA.importers;
+    src = filterByPeriod(src);
     const map = {};
     src.forEach(r => {
       if (!map[r.company]) map[r.company] = { name: r.company, vol: 0, val: 0, txn: 0 };
@@ -256,11 +257,12 @@ export default function Dashboard() {
     return Object.values(map).sort((a, b) => b.vol - a.vol).slice(0, 15).map(d => ({
       ...d, avg_price: d.vol > 0 ? Math.round(d.val / d.vol) : 0
     }));
-  }, [selFamily]);
+  }, [selFamily, filterByPeriod]);
 
   // Top suppliers
   const topSuppliers = useMemo(() => {
-    const src = selFamily ? DATA.suppliers.filter(r => r.family === selFamily) : DATA.suppliers;
+    let src = selFamily ? DATA.suppliers.filter(r => r.family === selFamily) : DATA.suppliers;
+    src = filterByPeriod(src);
     const map = {};
     src.forEach(r => {
       if (!map[r.supplier]) map[r.supplier] = { name: r.supplier, vol: 0, val: 0, txn: 0 };
@@ -271,18 +273,19 @@ export default function Dashboard() {
     return Object.values(map).sort((a, b) => b.vol - a.vol).slice(0, 15).map(d => ({
       ...d, avg_price: d.vol > 0 ? Math.round(d.val / d.vol) : 0
     }));
-  }, [selFamily]);
+  }, [selFamily, filterByPeriod]);
 
   // Customs ports
   const topPorts = useMemo(() => {
-    const src = selFamily ? DATA.customs.filter(r => r.family === selFamily) : DATA.customs;
+    let src = selFamily ? DATA.customs.filter(r => r.family === selFamily) : DATA.customs;
+    src = filterByPeriod(src);
     const map = {};
     src.forEach(r => {
       if (!map[r.customs]) map[r.customs] = { name: r.customs, vol: 0 };
       map[r.customs].vol += r.vol;
     });
     return Object.values(map).sort((a, b) => b.vol - a.vol).slice(0, 12);
-  }, [selFamily]);
+  }, [selFamily, filterByPeriod]);
 
   // KPI totals
   const totals = useMemo(() => {
