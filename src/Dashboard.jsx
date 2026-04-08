@@ -125,7 +125,6 @@ export default function Dashboard() {
   const [selOrigin, setSelOrigin] = useState(null);
   const [selPeriod, setSelPeriod] = useState(null); // clicked period from chart
   const [selSupplier, setSelSupplier] = useState(null);
-  const [supplierSearch, setSupplierSearch] = useState("");
 
   const families = DATA.meta.families;
 
@@ -351,7 +350,7 @@ export default function Dashboard() {
     return { vol, val, txn, avg: vol > 0 ? Math.round(val / vol) : 0, origins: originData.length };
   }, [mfData, moData, selOrigin, originData, filterByPeriod]);
 
-  const clearFilters = () => { setSelFamily(null); setSelOrigin(null); setSelPeriod(null); setSelSupplier(null); setSupplierSearch(""); };
+  const clearFilters = () => { setSelFamily(null); setSelOrigin(null); setSelPeriod(null); setSelSupplier(null); };
 
   const tickFormatter = (v) => {
     if (timeMode === "month") { const parts = v.split("-"); return `${parts[1]}/${parts[0].slice(2)}`; }
@@ -392,8 +391,8 @@ export default function Dashboard() {
       {/* Product Family Selector */}
       <div style={{ background: "#fff", padding: `10px ${pad}px`, borderBottom: "1px solid #e2e8f0", display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
         <span style={{ fontSize: 12, fontWeight: 600, color: "#64748b", marginRight: 4 }}>Product:</span>
-        <Pill label="All" active={!selFamily} onClick={() => { setSelFamily(null); setSelOrigin(null); setSelPeriod(null); setSelSupplier(null); setSupplierSearch(""); }} />
-        {families.map(f => <Pill key={f} label={f.replace("Coated — ", "")} active={selFamily === f} onClick={() => { setSelFamily(f); setSelOrigin(null); setSelPeriod(null); setSelSupplier(null); setSupplierSearch(""); }} color={FAMILY_COLORS[f]} />)}
+        <Pill label="All" active={!selFamily} onClick={() => { setSelFamily(null); setSelOrigin(null); setSelPeriod(null); setSelSupplier(null); }} />
+        {families.map(f => <Pill key={f} label={f.replace("Coated — ", "")} active={selFamily === f} onClick={() => { setSelFamily(f); setSelOrigin(null); setSelPeriod(null); setSelSupplier(null); }} color={FAMILY_COLORS[f]} />)}
         <div style={{ width: 1, height: 24, background: "#e2e8f0", margin: "0 4px" }} />
         <span style={{ fontSize: 12, fontWeight: 600, color: "#64748b", marginRight: 4 }}>Origin:</span>
         <select value={selOrigin || ""} onChange={e => setSelOrigin(e.target.value || null)} style={{
@@ -407,49 +406,15 @@ export default function Dashboard() {
         </select>
         <div style={{ width: 1, height: 24, background: "#e2e8f0", margin: "0 4px" }} />
         <span style={{ fontSize: 12, fontWeight: 600, color: "#64748b", marginRight: 4 }}>Supplier:</span>
-        <div style={{ position: "relative", display: "inline-block" }}>
-          <input
-            type="text"
-            placeholder={selSupplier || "All Suppliers"}
-            value={supplierSearch}
-            onChange={e => setSupplierSearch(e.target.value)}
-            onFocus={e => e.target.select()}
-            style={{
-              padding: "5px 10px", borderRadius: 8, border: "1px solid #cbd5e1", fontSize: 12,
-              background: selSupplier ? "#dbeafe" : "#fff", color: selSupplier ? "#2563eb" : "#475569",
-              fontWeight: selSupplier ? 600 : 400, cursor: "text", minHeight: 30, width: 180,
-              outline: "none"
-            }}
-          />
-          {selSupplier && (
-            <span onClick={() => { setSelSupplier(null); setSupplierSearch(""); }} style={{
-              position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)",
-              cursor: "pointer", color: "#94a3b8", fontWeight: 700, fontSize: 14, lineHeight: 1
-            }}>&times;</span>
-          )}
-          {supplierSearch && !selSupplier && (
-            <div style={{
-              position: "absolute", top: "100%", left: 0, zIndex: 100, background: "#fff",
-              border: "1px solid #e2e8f0", borderRadius: 8, boxShadow: "0 4px 12px rgba(0,0,0,.15)",
-              maxHeight: 200, overflowY: "auto", width: 260, marginTop: 2
-            }}>
-              {DATA.meta.suppliers
-                .filter(s => s.toLowerCase().includes(supplierSearch.toLowerCase()))
-                .slice(0, 20)
-                .map(s => (
-                  <div key={s} onClick={() => { setSelSupplier(s); setSupplierSearch(""); }}
-                    style={{ padding: "6px 10px", fontSize: 11, cursor: "pointer", color: "#334155" }}
-                    onMouseEnter={e => e.currentTarget.style.background = "#f1f5f9"}
-                    onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                    {s}
-                  </div>
-                ))}
-              {DATA.meta.suppliers.filter(s => s.toLowerCase().includes(supplierSearch.toLowerCase())).length === 0 && (
-                <div style={{ padding: "6px 10px", fontSize: 11, color: "#94a3b8" }}>No matches</div>
-              )}
-            </div>
-          )}
-        </div>
+        <select value={selSupplier || ""} onChange={e => setSelSupplier(e.target.value || null)} style={{
+          padding: "5px 10px", borderRadius: 8, border: "1px solid #cbd5e1", fontSize: 12,
+          background: selSupplier ? "#dbeafe" : "#fff", color: selSupplier ? "#2563eb" : "#475569",
+          fontWeight: selSupplier ? 600 : 400, cursor: "pointer", minHeight: 30, maxWidth: 220,
+          outline: "none", appearance: "auto"
+        }}>
+          <option value="">All Suppliers</option>
+          {DATA.meta.suppliers.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
         <div style={{ width: 1, height: 24, background: "#e2e8f0", margin: "0 4px" }} />
         <span style={{ fontSize: 12, fontWeight: 600, color: "#64748b", marginRight: 4 }}>Period:</span>
         <Toggle options={[{ label: "Monthly", value: "month" }, { label: "Quarterly", value: "quarter" }, { label: "Yearly", value: "year" }]} value={timeMode} onChange={v => { setTimeMode(v); setSelPeriod(null); }} />
