@@ -246,6 +246,7 @@ export default function Dashboard() {
   // Top importers
   const topImporters = useMemo(() => {
     let src = selFamily ? DATA.importers.filter(r => r.family === selFamily) : DATA.importers;
+    if (selOrigin) src = src.filter(r => r.origin === selOrigin);
     src = filterByPeriod(src);
     const map = {};
     src.forEach(r => {
@@ -257,11 +258,12 @@ export default function Dashboard() {
     return Object.values(map).sort((a, b) => b.vol - a.vol).slice(0, 15).map(d => ({
       ...d, avg_price: d.vol > 0 ? Math.round(d.val / d.vol) : 0
     }));
-  }, [selFamily, filterByPeriod]);
+  }, [selFamily, selOrigin, filterByPeriod]);
 
   // Top suppliers
   const topSuppliers = useMemo(() => {
     let src = selFamily ? DATA.suppliers.filter(r => r.family === selFamily) : DATA.suppliers;
+    if (selOrigin) src = src.filter(r => r.origin === selOrigin);
     src = filterByPeriod(src);
     const map = {};
     src.forEach(r => {
@@ -273,11 +275,12 @@ export default function Dashboard() {
     return Object.values(map).sort((a, b) => b.vol - a.vol).slice(0, 15).map(d => ({
       ...d, avg_price: d.vol > 0 ? Math.round(d.val / d.vol) : 0
     }));
-  }, [selFamily, filterByPeriod]);
+  }, [selFamily, selOrigin, filterByPeriod]);
 
   // Customs ports
   const topPorts = useMemo(() => {
     let src = selFamily ? DATA.customs.filter(r => r.family === selFamily) : DATA.customs;
+    if (selOrigin) src = src.filter(r => r.origin === selOrigin);
     src = filterByPeriod(src);
     const map = {};
     src.forEach(r => {
@@ -285,7 +288,7 @@ export default function Dashboard() {
       map[r.customs].vol += r.vol;
     });
     return Object.values(map).sort((a, b) => b.vol - a.vol).slice(0, 12);
-  }, [selFamily, filterByPeriod]);
+  }, [selFamily, selOrigin, filterByPeriod]);
 
   // KPI totals
   const totals = useMemo(() => {
@@ -340,27 +343,24 @@ export default function Dashboard() {
         <Pill label="All" active={!selFamily} onClick={() => { setSelFamily(null); setSelOrigin(null); setSelPeriod(null); }} />
         {families.map(f => <Pill key={f} label={f.replace("Coated — ", "")} active={selFamily === f} onClick={() => { setSelFamily(f); setSelOrigin(null); setSelPeriod(null); }} color={FAMILY_COLORS[f]} />)}
         <div style={{ width: 1, height: 24, background: "#e2e8f0", margin: "0 4px" }} />
+        <span style={{ fontSize: 12, fontWeight: 600, color: "#64748b", marginRight: 4 }}>Origin:</span>
+        <select value={selOrigin || ""} onChange={e => setSelOrigin(e.target.value || null)} style={{
+          padding: "5px 10px", borderRadius: 8, border: "1px solid #cbd5e1", fontSize: 12,
+          background: selOrigin ? "#dbeafe" : "#fff", color: selOrigin ? "#2563eb" : "#475569",
+          fontWeight: selOrigin ? 600 : 400, cursor: "pointer", minHeight: 30,
+          outline: "none", appearance: "auto"
+        }}>
+          <option value="">All Countries</option>
+          {DATA.meta.origins.map(o => <option key={o} value={o}>{o.charAt(0) + o.slice(1).toLowerCase()}</option>)}
+        </select>
+        <div style={{ width: 1, height: 24, background: "#e2e8f0", margin: "0 4px" }} />
         <span style={{ fontSize: 12, fontWeight: 600, color: "#64748b", marginRight: 4 }}>Period:</span>
         <Toggle options={[{ label: "Monthly", value: "month" }, { label: "Quarterly", value: "quarter" }, { label: "Yearly", value: "year" }]} value={timeMode} onChange={v => { setTimeMode(v); setSelPeriod(null); }} />
         {selPeriod && (
-          <>
-            <div style={{ width: 1, height: 24, background: "#e2e8f0", margin: "0 4px" }} />
-            <span style={{ fontSize: 12, color: "#64748b" }}>Period:</span>
-            <span style={{ background: "#fef3c7", color: "#92400e", borderRadius: 12, padding: "2px 10px", fontSize: 12, fontWeight: 500 }}>
-              {selPeriod}
-              <span onClick={() => setSelPeriod(null)} style={{ cursor: "pointer", marginLeft: 4, fontWeight: 700 }}>&times;</span>
-            </span>
-          </>
-        )}
-        {selOrigin && (
-          <>
-            <div style={{ width: 1, height: 24, background: "#e2e8f0", margin: "0 4px" }} />
-            <span style={{ fontSize: 12, color: "#64748b" }}>Origin:</span>
-            <span style={{ background: "#dbeafe", color: "#2563eb", borderRadius: 12, padding: "2px 10px", fontSize: 12, fontWeight: 500 }}>
-              {selOrigin}
-              <span onClick={() => setSelOrigin(null)} style={{ cursor: "pointer", marginLeft: 4, fontWeight: 700 }}>&times;</span>
-            </span>
-          </>
+          <span style={{ background: "#fef3c7", color: "#92400e", borderRadius: 12, padding: "2px 10px", fontSize: 12, fontWeight: 500, marginLeft: 4 }}>
+            {selPeriod}
+            <span onClick={() => setSelPeriod(null)} style={{ cursor: "pointer", marginLeft: 4, fontWeight: 700 }}>&times;</span>
+          </span>
         )}
       </div>
 
