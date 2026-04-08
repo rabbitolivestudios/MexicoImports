@@ -127,6 +127,22 @@ export default function Dashboard() {
 
   const families = DATA.meta.families;
 
+  // Months that correspond to the selected period
+  const selMonths = useMemo(() => selPeriod ? new Set(periodToMonths(selPeriod, timeMode)) : null, [selPeriod, timeMode]);
+
+  // Helper to filter records by selected period
+  const filterByPeriod = useCallback((records) => {
+    if (!selMonths) return records;
+    return records.filter(r => selMonths.has(r.month));
+  }, [selMonths]);
+
+  // Chart click handler
+  const handleChartClick = useCallback((data) => {
+    if (!data?.activePayload?.[0]) return;
+    const period = data.activePayload[0].payload.period;
+    setSelPeriod(prev => prev === period ? null : period);
+  }, []);
+
   // Filter data by selected family
   const mfData = useMemo(() => {
     let d = DATA.monthlyFamily;
@@ -276,22 +292,6 @@ export default function Dashboard() {
   }, [mfData, moData, selOrigin, originData, filterByPeriod]);
 
   const clearFilters = () => { setSelFamily(null); setSelOrigin(null); setSelPeriod(null); };
-
-  // Months that correspond to the selected period
-  const selMonths = useMemo(() => selPeriod ? new Set(periodToMonths(selPeriod, timeMode)) : null, [selPeriod, timeMode]);
-
-  // Helper to filter records by selected period
-  const filterByPeriod = useCallback((records) => {
-    if (!selMonths) return records;
-    return records.filter(r => selMonths.has(r.month));
-  }, [selMonths]);
-
-  // Chart click handler
-  const handleChartClick = useCallback((data) => {
-    if (!data?.activePayload?.[0]) return;
-    const period = data.activePayload[0].payload.period;
-    setSelPeriod(prev => prev === period ? null : period);
-  }, []);
 
   const tickFormatter = (v) => {
     if (timeMode === "month") { const parts = v.split("-"); return `${parts[1]}/${parts[0].slice(2)}`; }
