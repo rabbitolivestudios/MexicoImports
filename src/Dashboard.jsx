@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
-import { BarChart, Bar, LineChart, Line, ComposedChart, XAxis, YAxis, Tooltip, PieChart, Pie, Cell, ResponsiveContainer, CartesianGrid, Legend, Area } from "recharts";
+import { BarChart, Bar, LineChart, Line, ComposedChart, XAxis, YAxis, Tooltip, PieChart, Pie, Cell, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
 import DATA from "./data.json";
 
 /* ─── Colors ─── */
@@ -82,6 +82,17 @@ const MiniBar = ({ data, color, max: maxOverride }) => (
 );
 
 /* ─── Data helpers ─── */
+const periodToMonths = (period, timeMode) => {
+  if (timeMode === "month") return [period]; // "2024-03" → ["2024-03"]
+  if (timeMode === "quarter") {
+    const [y, q] = period.split("-Q");
+    const start = (parseInt(q) - 1) * 3 + 1;
+    return [0, 1, 2].map(i => `${y}-${String(start + i).padStart(2, "0")}`);
+  }
+  // year → all 12 months
+  return Array.from({ length: 12 }, (_, i) => `${period}-${String(i + 1).padStart(2, "0")}`);
+};
+
 const aggregateByTime = (records, timeMode) => {
   const map = {};
   records.forEach(r => {
@@ -112,6 +123,7 @@ export default function Dashboard() {
   const [selFamily, setSelFamily] = useState(null); // null = all
   const [timeMode, setTimeMode] = useState("month");
   const [selOrigin, setSelOrigin] = useState(null);
+  const [selPeriod, setSelPeriod] = useState(null); // clicked period from chart
 
   const families = DATA.meta.families;
 
@@ -179,7 +191,8 @@ export default function Dashboard() {
 
   // Origin breakdown
   const originData = useMemo(() => {
-    const src = selFamily ? DATA.monthlyOrigin.filter(r => r.family === selFamily) : DATA.monthlyOriginAll;
+    let src = selFamily ? DATA.monthlyOrigin.filter(r => r.family === selFamily) : DATA.monthlyOriginAll;
+    src = filterByPeriod(src);
     const map = {};
     src.forEach(r => {
       if (!map[r.origin]) map[r.origin] = { name: r.origin, vol: 0, val: 0 };
@@ -189,26 +202,28 @@ export default function Dashboard() {
     return Object.values(map).sort((a, b) => b.vol - a.vol).map(d => ({
       ...d, avg_price: d.vol > 0 ? Math.round(d.val / d.vol) : 0
     }));
-  }, [selFamily]);
+  }, [selFamily, filterByPeriod]);
 
   // Family breakdown (pie)
   const familyPie = useMemo(() => {
+    const src = filterByPeriod(DATA.monthlyFamily);
     const map = {};
-    DATA.monthlyFamily.forEach(r => { map[r.family] = (map[r.family] || 0) + r.vol; });
+    src.forEach(r => { map[r.family] = (map[r.family] || 0) + r.vol; });
     return Object.entries(map).sort((a, b) => b[1] - a[1]).map(([name, value]) => ({ name, value }));
-  }, []);
+  }, [filterByPeriod]);
 
   // Subtype breakdown
   const subtypeData = useMemo(() => {
     if (!selFamily) return null;
+    const src = filterByPeriod(DATA.monthlySub.filter(r => r.family === selFamily));
     const map = {};
-    DATA.monthlySub.filter(r => r.family === selFamily).forEach(r => {
+    src.forEach(r => {
       if (!map[r.subtype]) map[r.subtype] = { name: r.subtype, vol: 0, val: 0 };
       map[r.subtype].vol += r.vol;
       map[r.subtype].val += r.val;
     });
     return Object.values(map).sort((a, b) => b.vol - a.vol);
-  }, [selFamily]);
+  }, [selFamily, filterByPeriod]);
 
   // Top importers
   const topImporters = useMemo(() => {
@@ -253,14 +268,30 @@ export default function Dashboard() {
 
   // KPI totals
   const totals = useMemo(() => {
-    const src = selOrigin ? moData : mfData;
+    const src = filterByPeriod(selOrigin ? moData : mfData);
     const vol = src.reduce((s, r) => s + r.vol, 0);
     const val = src.reduce((s, r) => s + r.val, 0);
     const txn = src.reduce((s, r) => s + (r.txn || 0), 0);
     return { vol, val, txn, avg: vol > 0 ? Math.round(val / vol) : 0, origins: originData.length };
-  }, [mfData, moData, selOrigin, originData]);
+  }, [mfData, moData, selOrigin, originData, filterByPeriod]);
 
-  const clearFilters = () => { setSelFamily(null); setSelOrigin(null); };
+  const clearFilters = () => { setSelFamily(null); setSelOrigin(null); setSelPeriod(null); };
+
+  // Months that correspond to the selected period
+  const selMonths = useMemo(() => selPeriod ? new Set(periodToMonths(selPeriod, timeMode)) : null, [selPeriod, timeMode]);
+
+  // Helper to filter records by selected period
+  const filterByPeriod = useCallback((records) => {
+    if (!selMonths) return records;
+    return records.filter(r => selMonths.has(r.month));
+  }, [selMonths]);
+
+  // Chart click handler
+  const handleChartClick = useCallback((data) => {
+    if (!data?.activePayload?.[0]) return;
+    const period = data.activePayload[0].payload.period;
+    setSelPeriod(prev => prev === period ? null : period);
+  }, []);
 
   const tickFormatter = (v) => {
     if (timeMode === "month") { const parts = v.split("-"); return `${parts[1]}/${parts[0].slice(2)}`; }
@@ -293,7 +324,7 @@ export default function Dashboard() {
           </div>
           <div style={{ textAlign: "right", flexShrink: 0 }}>
             <div style={{ color: "#60a5fa", fontWeight: 600, fontSize: isMobile ? 16 : 20 }}>{fmt(totals.vol)} mt</div>
-            <div style={{ fontSize: isMobile ? 10 : 12, color: "#94a3b8" }}>{selFamily || "All Products"}{selOrigin ? ` · ${selOrigin}` : ""}</div>
+            <div style={{ fontSize: isMobile ? 10 : 12, color: "#94a3b8" }}>{selFamily || "All Products"}{selPeriod ? ` · ${selPeriod}` : ""}{selOrigin ? ` · ${selOrigin}` : ""}</div>
           </div>
         </div>
       </div>
@@ -301,11 +332,21 @@ export default function Dashboard() {
       {/* Product Family Selector */}
       <div style={{ background: "#fff", padding: `10px ${pad}px`, borderBottom: "1px solid #e2e8f0", display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
         <span style={{ fontSize: 12, fontWeight: 600, color: "#64748b", marginRight: 4 }}>Product:</span>
-        <Pill label="All" active={!selFamily} onClick={() => { setSelFamily(null); setSelOrigin(null); }} />
-        {families.map(f => <Pill key={f} label={f.replace("Coated — ", "")} active={selFamily === f} onClick={() => { setSelFamily(f); setSelOrigin(null); }} color={FAMILY_COLORS[f]} />)}
+        <Pill label="All" active={!selFamily} onClick={() => { setSelFamily(null); setSelOrigin(null); setSelPeriod(null); }} />
+        {families.map(f => <Pill key={f} label={f.replace("Coated — ", "")} active={selFamily === f} onClick={() => { setSelFamily(f); setSelOrigin(null); setSelPeriod(null); }} color={FAMILY_COLORS[f]} />)}
         <div style={{ width: 1, height: 24, background: "#e2e8f0", margin: "0 4px" }} />
         <span style={{ fontSize: 12, fontWeight: 600, color: "#64748b", marginRight: 4 }}>Period:</span>
-        <Toggle options={[{ label: "Monthly", value: "month" }, { label: "Quarterly", value: "quarter" }, { label: "Yearly", value: "year" }]} value={timeMode} onChange={setTimeMode} />
+        <Toggle options={[{ label: "Monthly", value: "month" }, { label: "Quarterly", value: "quarter" }, { label: "Yearly", value: "year" }]} value={timeMode} onChange={v => { setTimeMode(v); setSelPeriod(null); }} />
+        {selPeriod && (
+          <>
+            <div style={{ width: 1, height: 24, background: "#e2e8f0", margin: "0 4px" }} />
+            <span style={{ fontSize: 12, color: "#64748b" }}>Period:</span>
+            <span style={{ background: "#fef3c7", color: "#92400e", borderRadius: 12, padding: "2px 10px", fontSize: 12, fontWeight: 500 }}>
+              {selPeriod}
+              <span onClick={() => setSelPeriod(null)} style={{ cursor: "pointer", marginLeft: 4, fontWeight: 700 }}>&times;</span>
+            </span>
+          </>
+        )}
         {selOrigin && (
           <>
             <div style={{ width: 1, height: 24, background: "#e2e8f0", margin: "0 4px" }} />
@@ -335,13 +376,17 @@ export default function Dashboard() {
           {/* Volume + Price Trend */}
           <Card title="Volume & Price Trend" style={{ gridColumn: isMobile ? "1" : "1 / -1" }}>
             <ResponsiveContainer width="100%" height={isMobile ? 240 : 300}>
-              <ComposedChart data={volumeTime} margin={{ left: 10, right: 10, top: 5, bottom: 5 }}>
+              <ComposedChart data={volumeTime} margin={{ left: 10, right: 10, top: 5, bottom: 5 }} onClick={handleChartClick} style={{ cursor: "pointer" }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                 <XAxis dataKey="period" tick={{ fontSize: 10 }} tickFormatter={tickFormatter} />
                 <YAxis yAxisId="vol" tick={{ fontSize: 10 }} tickFormatter={fmt} />
                 <YAxis yAxisId="price" orientation="right" tick={{ fontSize: 10 }} tickFormatter={v => `$${v}`} />
                 <Tooltip formatter={(v, n) => [n === "avg_price" ? `$${fmtN(v)}/mt` : `${fmtN(v)} mt`, n === "avg_price" ? "Avg CIF Price" : "Volume"]} />
-                <Bar yAxisId="vol" dataKey="vol" fill="#2563eb" radius={[4, 4, 0, 0]} opacity={0.8} name="Volume" />
+                <Bar yAxisId="vol" dataKey="vol" radius={[4, 4, 0, 0]} name="Volume">
+                  {volumeTime.map((entry, i) => (
+                    <Cell key={entry.period} fill="#2563eb" opacity={!selPeriod ? 0.8 : entry.period === selPeriod ? 1 : 0.25} />
+                  ))}
+                </Bar>
                 <Line yAxisId="price" dataKey="avg_price" stroke="#dc2626" strokeWidth={2} dot={{ r: 3 }} name="avg_price" />
               </ComposedChart>
             </ResponsiveContainer>
