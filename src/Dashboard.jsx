@@ -136,11 +136,10 @@ export default function Dashboard() {
     return records.filter(r => selMonths.has(r.month));
   }, [selMonths]);
 
-  // Chart click handler
-  const handleChartClick = useCallback((data) => {
-    if (!data?.activePayload?.[0]) return;
-    const period = data.activePayload[0].payload.period;
-    setSelPeriod(prev => prev === period ? null : period);
+  // Bar click handler (Recharts Bar onClick gives the bar's data directly)
+  const handleBarClick = useCallback((data) => {
+    if (!data?.period) return;
+    setSelPeriod(prev => prev === data.period ? null : data.period);
   }, []);
 
   // Filter data by selected family
@@ -166,8 +165,9 @@ export default function Dashboard() {
   // Stacked by family over time
   const stackedTime = useMemo(() => {
     if (selFamily) return null;
+    const src = filterByPeriod(DATA.monthlyFamily);
     const map = {};
-    DATA.monthlyFamily.forEach(r => {
+    src.forEach(r => {
       let key;
       if (timeMode === "quarter") { const [y, m] = r.month.split("-"); key = `${y}-Q${Math.ceil(parseInt(m)/3)}`; }
       else if (timeMode === "year") { key = r.month.split("-")[0]; }
@@ -176,18 +176,20 @@ export default function Dashboard() {
       map[key][r.family] = (map[key][r.family] || 0) + r.vol;
     });
     return Object.values(map).sort((a, b) => a.period.localeCompare(b.period));
-  }, [selFamily, timeMode]);
+  }, [selFamily, timeMode, filterByPeriod]);
 
-  // Price over time by origin (top 5 origins)
+  // Price over time by origin (top 5 origins, or just selected origin)
   const priceByOrigin = useMemo(() => {
-    const src = selFamily ? DATA.monthlyOrigin.filter(r => r.family === selFamily) : DATA.monthlyOriginAll;
-    // Get top 5 origins by volume
+    let src = selFamily ? DATA.monthlyOrigin.filter(r => r.family === selFamily) : DATA.monthlyOriginAll;
+    if (selOrigin) src = src.filter(r => r.origin === selOrigin);
+    src = filterByPeriod(src);
+    // Get top origins by volume
     const originVols = {};
     src.forEach(r => { originVols[r.origin] = (originVols[r.origin] || 0) + r.vol; });
-    const top5 = Object.entries(originVols).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([o]) => o);
-    // Build monthly price series
+    const topN = Object.entries(originVols).sort((a, b) => b[1] - a[1]).slice(0, selOrigin ? 1 : 6).map(([o]) => o);
+    // Build price series
     const map = {};
-    src.filter(r => top5.includes(r.origin)).forEach(r => {
+    src.filter(r => topN.includes(r.origin)).forEach(r => {
       let key;
       if (timeMode === "quarter") { const [y, m] = r.month.split("-"); key = `${y}-Q${Math.ceil(parseInt(m)/3)}`; }
       else if (timeMode === "year") { key = r.month.split("-")[0]; }
@@ -199,11 +201,11 @@ export default function Dashboard() {
     });
     const series = Object.values(map).sort((a, b) => a.period.localeCompare(b.period)).map(d => {
       const out = { period: d.period };
-      top5.forEach(o => { out[o] = d[`${o}_vol`] > 0 ? Math.round(d[`${o}_val`] / d[`${o}_vol`]) : null; });
+      topN.forEach(o => { out[o] = d[`${o}_vol`] > 0 ? Math.round(d[`${o}_val`] / d[`${o}_vol`]) : null; });
       return out;
     });
-    return { origins: top5, data: series };
-  }, [selFamily, timeMode]);
+    return { origins: topN, data: series };
+  }, [selFamily, selOrigin, timeMode, filterByPeriod]);
 
   // Origin breakdown
   const originData = useMemo(() => {
@@ -376,14 +378,14 @@ export default function Dashboard() {
           {/* Volume + Price Trend */}
           <Card title="Volume & Price Trend" style={{ gridColumn: isMobile ? "1" : "1 / -1" }}>
             <ResponsiveContainer width="100%" height={isMobile ? 240 : 300}>
-              <ComposedChart data={volumeTime} margin={{ left: 10, right: 10, top: 5, bottom: 5 }} onClick={handleChartClick} style={{ cursor: "pointer" }}>
+              <ComposedChart data={volumeTime} margin={{ left: 10, right: 10, top: 5, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                 <XAxis dataKey="period" tick={{ fontSize: 10 }} tickFormatter={tickFormatter} />
                 <YAxis yAxisId="vol" tick={{ fontSize: 10 }} tickFormatter={fmt} />
                 <YAxis yAxisId="price" orientation="right" tick={{ fontSize: 10 }} tickFormatter={v => `$${v}`} />
                 <Tooltip formatter={(v, n) => [n === "avg_price" ? `$${fmtN(v)}/mt` : `${fmtN(v)} mt`, n === "avg_price" ? "Avg CIF Price" : "Volume"]} />
-                <Bar yAxisId="vol" dataKey="vol" radius={[4, 4, 0, 0]} name="Volume">
-                  {volumeTime.map((entry, i) => (
+                <Bar yAxisId="vol" dataKey="vol" radius={[4, 4, 0, 0]} name="Volume" onClick={handleBarClick} style={{ cursor: "pointer" }}>
+                  {volumeTime.map((entry) => (
                     <Cell key={entry.period} fill="#2563eb" opacity={!selPeriod ? 0.8 : entry.period === selPeriod ? 1 : 0.25} />
                   ))}
                 </Bar>
