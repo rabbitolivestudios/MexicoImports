@@ -124,6 +124,8 @@ export default function Dashboard() {
   const [timeMode, setTimeMode] = useState("month");
   const [selOrigin, setSelOrigin] = useState(null);
   const [selPeriod, setSelPeriod] = useState(null); // clicked period from chart
+  const [selSupplier, setSelSupplier] = useState(null);
+  const [supplierSearch, setSupplierSearch] = useState("");
 
   const families = DATA.meta.families;
 
@@ -142,19 +144,62 @@ export default function Dashboard() {
     setSelPeriod(prev => prev === data.period ? null : data.period);
   }, []);
 
+  // When a supplier is selected, derive monthlyFamily-like data from DATA.suppliers
+  const supplierMonthlyFamily = useMemo(() => {
+    if (!selSupplier) return null;
+    let src = DATA.suppliers.filter(r => r.supplier === selSupplier);
+    // Aggregate by month+family (suppliers data is already keyed by month/family/origin/supplier)
+    const map = {};
+    src.forEach(r => {
+      const k = `${r.month}|${r.family}`;
+      if (!map[k]) map[k] = { month: r.month, family: r.family, vol: 0, val: 0, txn: 0 };
+      map[k].vol += r.vol; map[k].val += r.val; map[k].txn += r.txn || 0;
+    });
+    return Object.values(map);
+  }, [selSupplier]);
+
+  const supplierMonthlyOrigin = useMemo(() => {
+    if (!selSupplier) return null;
+    let src = DATA.suppliers.filter(r => r.supplier === selSupplier);
+    // This is already keyed by month/family/origin/supplier, aggregate by month+family+origin
+    const map = {};
+    src.forEach(r => {
+      const k = `${r.month}|${r.family}|${r.origin}`;
+      if (!map[k]) map[k] = { month: r.month, family: r.family, origin: r.origin, vol: 0, val: 0, txn: 0 };
+      map[k].vol += r.vol; map[k].val += r.val; map[k].txn += r.txn || 0;
+    });
+    return Object.values(map);
+  }, [selSupplier]);
+
+  const supplierMonthlyOriginAll = useMemo(() => {
+    if (!selSupplier) return null;
+    let src = DATA.suppliers.filter(r => r.supplier === selSupplier);
+    const map = {};
+    src.forEach(r => {
+      const k = `${r.month}|${r.origin}`;
+      if (!map[k]) map[k] = { month: r.month, origin: r.origin, vol: 0, val: 0, txn: 0 };
+      map[k].vol += r.vol; map[k].val += r.val; map[k].txn += r.txn || 0;
+    });
+    return Object.values(map);
+  }, [selSupplier]);
+
   // Filter data by selected family
   const mfData = useMemo(() => {
-    let d = DATA.monthlyFamily;
+    let d = selSupplier ? supplierMonthlyFamily : DATA.monthlyFamily;
+    if (!d) return [];
     if (selFamily) d = d.filter(r => r.family === selFamily);
     if (selOrigin) return []; // handled by origin view
     return d;
-  }, [selFamily, selOrigin]);
+  }, [selFamily, selOrigin, selSupplier, supplierMonthlyFamily]);
 
   const moData = useMemo(() => {
-    let d = selFamily ? DATA.monthlyOrigin.filter(r => r.family === selFamily) : DATA.monthlyOriginAll;
+    const base = selSupplier ? supplierMonthlyOrigin : DATA.monthlyOrigin;
+    const baseAll = selSupplier ? supplierMonthlyOriginAll : DATA.monthlyOriginAll;
+    if (!base || !baseAll) return [];
+    let d = selFamily ? base.filter(r => r.family === selFamily) : baseAll;
     if (selOrigin) d = d.filter(r => r.origin === selOrigin);
     return d;
-  }, [selFamily, selOrigin]);
+  }, [selFamily, selOrigin, selSupplier, supplierMonthlyOrigin, supplierMonthlyOriginAll]);
 
   // Volume over time
   const volumeTime = useMemo(() => {
@@ -165,7 +210,7 @@ export default function Dashboard() {
   // Stacked by family over time
   const stackedTime = useMemo(() => {
     if (selFamily) return null;
-    const src = filterByPeriod(DATA.monthlyFamily);
+    const src = filterByPeriod(selSupplier ? (supplierMonthlyFamily || []) : DATA.monthlyFamily);
     const map = {};
     src.forEach(r => {
       let key;
@@ -176,11 +221,13 @@ export default function Dashboard() {
       map[key][r.family] = (map[key][r.family] || 0) + r.vol;
     });
     return Object.values(map).sort((a, b) => a.period.localeCompare(b.period));
-  }, [selFamily, timeMode, filterByPeriod]);
+  }, [selFamily, timeMode, filterByPeriod, selSupplier, supplierMonthlyFamily]);
 
   // Price over time by origin (top 5 origins, or just selected origin)
   const priceByOrigin = useMemo(() => {
-    let src = selFamily ? DATA.monthlyOrigin.filter(r => r.family === selFamily) : DATA.monthlyOriginAll;
+    const base = selSupplier ? (supplierMonthlyOrigin || []) : DATA.monthlyOrigin;
+    const baseAll = selSupplier ? (supplierMonthlyOriginAll || []) : DATA.monthlyOriginAll;
+    let src = selFamily ? base.filter(r => r.family === selFamily) : baseAll;
     if (selOrigin) src = src.filter(r => r.origin === selOrigin);
     src = filterByPeriod(src);
     // Get top origins by volume
@@ -205,11 +252,13 @@ export default function Dashboard() {
       return out;
     });
     return { origins: topN, data: series };
-  }, [selFamily, selOrigin, timeMode, filterByPeriod]);
+  }, [selFamily, selOrigin, timeMode, filterByPeriod, selSupplier, supplierMonthlyOrigin, supplierMonthlyOriginAll]);
 
   // Origin breakdown
   const originData = useMemo(() => {
-    let src = selFamily ? DATA.monthlyOrigin.filter(r => r.family === selFamily) : DATA.monthlyOriginAll;
+    const base = selSupplier ? (supplierMonthlyOrigin || []) : DATA.monthlyOrigin;
+    const baseAll = selSupplier ? (supplierMonthlyOriginAll || []) : DATA.monthlyOriginAll;
+    let src = selFamily ? base.filter(r => r.family === selFamily) : baseAll;
     src = filterByPeriod(src);
     const map = {};
     src.forEach(r => {
@@ -220,19 +269,19 @@ export default function Dashboard() {
     return Object.values(map).sort((a, b) => b.vol - a.vol).map(d => ({
       ...d, avg_price: d.vol > 0 ? Math.round(d.val / d.vol) : 0
     }));
-  }, [selFamily, filterByPeriod]);
+  }, [selFamily, filterByPeriod, selSupplier, supplierMonthlyOrigin, supplierMonthlyOriginAll]);
 
   // Family breakdown (pie)
   const familyPie = useMemo(() => {
-    const src = filterByPeriod(DATA.monthlyFamily);
+    const src = filterByPeriod(selSupplier ? (supplierMonthlyFamily || []) : DATA.monthlyFamily);
     const map = {};
     src.forEach(r => { map[r.family] = (map[r.family] || 0) + r.vol; });
     return Object.entries(map).sort((a, b) => b[1] - a[1]).map(([name, value]) => ({ name, value }));
-  }, [filterByPeriod]);
+  }, [filterByPeriod, selSupplier, supplierMonthlyFamily]);
 
-  // Subtype breakdown
+  // Subtype breakdown (not available when filtered by supplier)
   const subtypeData = useMemo(() => {
-    if (!selFamily) return null;
+    if (!selFamily || selSupplier) return null;
     const src = filterByPeriod(DATA.monthlySub.filter(r => r.family === selFamily));
     const map = {};
     src.forEach(r => {
@@ -241,12 +290,13 @@ export default function Dashboard() {
       map[r.subtype].val += r.val;
     });
     return Object.values(map).sort((a, b) => b.vol - a.vol);
-  }, [selFamily, filterByPeriod]);
+  }, [selFamily, selSupplier, filterByPeriod]);
 
   // Top importers
   const topImporters = useMemo(() => {
     let src = selFamily ? DATA.importers.filter(r => r.family === selFamily) : DATA.importers;
     if (selOrigin) src = src.filter(r => r.origin === selOrigin);
+    if (selSupplier) src = src.filter(r => r.supplier === selSupplier);
     src = filterByPeriod(src);
     const map = {};
     src.forEach(r => {
@@ -258,12 +308,13 @@ export default function Dashboard() {
     return Object.values(map).sort((a, b) => b.vol - a.vol).slice(0, 15).map(d => ({
       ...d, avg_price: d.vol > 0 ? Math.round(d.val / d.vol) : 0
     }));
-  }, [selFamily, selOrigin, filterByPeriod]);
+  }, [selFamily, selOrigin, selSupplier, filterByPeriod]);
 
   // Top suppliers
   const topSuppliers = useMemo(() => {
     let src = selFamily ? DATA.suppliers.filter(r => r.family === selFamily) : DATA.suppliers;
     if (selOrigin) src = src.filter(r => r.origin === selOrigin);
+    if (selSupplier) src = src.filter(r => r.supplier === selSupplier);
     src = filterByPeriod(src);
     const map = {};
     src.forEach(r => {
@@ -275,12 +326,13 @@ export default function Dashboard() {
     return Object.values(map).sort((a, b) => b.vol - a.vol).slice(0, 15).map(d => ({
       ...d, avg_price: d.vol > 0 ? Math.round(d.val / d.vol) : 0
     }));
-  }, [selFamily, selOrigin, filterByPeriod]);
+  }, [selFamily, selOrigin, selSupplier, filterByPeriod]);
 
   // Customs ports
   const topPorts = useMemo(() => {
     let src = selFamily ? DATA.customs.filter(r => r.family === selFamily) : DATA.customs;
     if (selOrigin) src = src.filter(r => r.origin === selOrigin);
+    if (selSupplier) src = src.filter(r => r.supplier === selSupplier);
     src = filterByPeriod(src);
     const map = {};
     src.forEach(r => {
@@ -288,7 +340,7 @@ export default function Dashboard() {
       map[r.customs].vol += r.vol;
     });
     return Object.values(map).sort((a, b) => b.vol - a.vol).slice(0, 12);
-  }, [selFamily, selOrigin, filterByPeriod]);
+  }, [selFamily, selOrigin, selSupplier, filterByPeriod]);
 
   // KPI totals
   const totals = useMemo(() => {
@@ -299,7 +351,7 @@ export default function Dashboard() {
     return { vol, val, txn, avg: vol > 0 ? Math.round(val / vol) : 0, origins: originData.length };
   }, [mfData, moData, selOrigin, originData, filterByPeriod]);
 
-  const clearFilters = () => { setSelFamily(null); setSelOrigin(null); setSelPeriod(null); };
+  const clearFilters = () => { setSelFamily(null); setSelOrigin(null); setSelPeriod(null); setSelSupplier(null); setSupplierSearch(""); };
 
   const tickFormatter = (v) => {
     if (timeMode === "month") { const parts = v.split("-"); return `${parts[1]}/${parts[0].slice(2)}`; }
@@ -332,7 +384,7 @@ export default function Dashboard() {
           </div>
           <div style={{ textAlign: "right", flexShrink: 0 }}>
             <div style={{ color: "#60a5fa", fontWeight: 600, fontSize: isMobile ? 16 : 20 }}>{fmt(totals.vol)} mt</div>
-            <div style={{ fontSize: isMobile ? 10 : 12, color: "#94a3b8" }}>{selFamily || "All Products"}{selPeriod ? ` · ${selPeriod}` : ""}{selOrigin ? ` · ${selOrigin}` : ""}</div>
+            <div style={{ fontSize: isMobile ? 10 : 12, color: "#94a3b8" }}>{selFamily || "All Products"}{selPeriod ? ` · ${selPeriod}` : ""}{selOrigin ? ` · ${selOrigin}` : ""}{selSupplier ? ` · ${selSupplier}` : ""}</div>
           </div>
         </div>
       </div>
@@ -340,8 +392,8 @@ export default function Dashboard() {
       {/* Product Family Selector */}
       <div style={{ background: "#fff", padding: `10px ${pad}px`, borderBottom: "1px solid #e2e8f0", display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
         <span style={{ fontSize: 12, fontWeight: 600, color: "#64748b", marginRight: 4 }}>Product:</span>
-        <Pill label="All" active={!selFamily} onClick={() => { setSelFamily(null); setSelOrigin(null); setSelPeriod(null); }} />
-        {families.map(f => <Pill key={f} label={f.replace("Coated — ", "")} active={selFamily === f} onClick={() => { setSelFamily(f); setSelOrigin(null); setSelPeriod(null); }} color={FAMILY_COLORS[f]} />)}
+        <Pill label="All" active={!selFamily} onClick={() => { setSelFamily(null); setSelOrigin(null); setSelPeriod(null); setSelSupplier(null); setSupplierSearch(""); }} />
+        {families.map(f => <Pill key={f} label={f.replace("Coated — ", "")} active={selFamily === f} onClick={() => { setSelFamily(f); setSelOrigin(null); setSelPeriod(null); setSelSupplier(null); setSupplierSearch(""); }} color={FAMILY_COLORS[f]} />)}
         <div style={{ width: 1, height: 24, background: "#e2e8f0", margin: "0 4px" }} />
         <span style={{ fontSize: 12, fontWeight: 600, color: "#64748b", marginRight: 4 }}>Origin:</span>
         <select value={selOrigin || ""} onChange={e => setSelOrigin(e.target.value || null)} style={{
@@ -353,6 +405,51 @@ export default function Dashboard() {
           <option value="">All Countries</option>
           {DATA.meta.origins.map(o => <option key={o} value={o}>{o.charAt(0) + o.slice(1).toLowerCase()}</option>)}
         </select>
+        <div style={{ width: 1, height: 24, background: "#e2e8f0", margin: "0 4px" }} />
+        <span style={{ fontSize: 12, fontWeight: 600, color: "#64748b", marginRight: 4 }}>Supplier:</span>
+        <div style={{ position: "relative", display: "inline-block" }}>
+          <input
+            type="text"
+            placeholder={selSupplier || "All Suppliers"}
+            value={supplierSearch}
+            onChange={e => setSupplierSearch(e.target.value)}
+            onFocus={e => e.target.select()}
+            style={{
+              padding: "5px 10px", borderRadius: 8, border: "1px solid #cbd5e1", fontSize: 12,
+              background: selSupplier ? "#dbeafe" : "#fff", color: selSupplier ? "#2563eb" : "#475569",
+              fontWeight: selSupplier ? 600 : 400, cursor: "text", minHeight: 30, width: 180,
+              outline: "none"
+            }}
+          />
+          {selSupplier && (
+            <span onClick={() => { setSelSupplier(null); setSupplierSearch(""); }} style={{
+              position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)",
+              cursor: "pointer", color: "#94a3b8", fontWeight: 700, fontSize: 14, lineHeight: 1
+            }}>&times;</span>
+          )}
+          {supplierSearch && !selSupplier && (
+            <div style={{
+              position: "absolute", top: "100%", left: 0, zIndex: 100, background: "#fff",
+              border: "1px solid #e2e8f0", borderRadius: 8, boxShadow: "0 4px 12px rgba(0,0,0,.15)",
+              maxHeight: 200, overflowY: "auto", width: 260, marginTop: 2
+            }}>
+              {DATA.meta.suppliers
+                .filter(s => s.toLowerCase().includes(supplierSearch.toLowerCase()))
+                .slice(0, 20)
+                .map(s => (
+                  <div key={s} onClick={() => { setSelSupplier(s); setSupplierSearch(""); }}
+                    style={{ padding: "6px 10px", fontSize: 11, cursor: "pointer", color: "#334155" }}
+                    onMouseEnter={e => e.currentTarget.style.background = "#f1f5f9"}
+                    onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                    {s}
+                  </div>
+                ))}
+              {DATA.meta.suppliers.filter(s => s.toLowerCase().includes(supplierSearch.toLowerCase())).length === 0 && (
+                <div style={{ padding: "6px 10px", fontSize: 11, color: "#94a3b8" }}>No matches</div>
+              )}
+            </div>
+          )}
+        </div>
         <div style={{ width: 1, height: 24, background: "#e2e8f0", margin: "0 4px" }} />
         <span style={{ fontSize: 12, fontWeight: 600, color: "#64748b", marginRight: 4 }}>Period:</span>
         <Toggle options={[{ label: "Monthly", value: "month" }, { label: "Quarterly", value: "quarter" }, { label: "Yearly", value: "year" }]} value={timeMode} onChange={v => { setTimeMode(v); setSelPeriod(null); }} />
