@@ -8,6 +8,7 @@ const FAMILY_COLORS = {
   "Coated — HDG": "#16a34a", "Coated — Galvalume": "#0891b2",
   "Coated — Aluminized": "#d97706", "Coated — EG": "#ea580c",
   "Coated — Pre-painted": "#e11d48", "Coated — Other Metallic": "#6b7280",
+  "Aluminum": "#64748b", "Zinc": "#0f766e",
 };
 const ORIGIN_COLORS = [
   "#2563eb","#dc2626","#16a34a","#d97706","#7c3aed","#0891b2","#e11d48",
